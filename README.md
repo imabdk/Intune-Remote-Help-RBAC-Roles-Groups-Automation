@@ -1,4 +1,4 @@
-# Intune Remote Help RBAC Automation
+# Intune Remote Help RBAC Roles Groups Automation
 
 Automate the creation of custom RBAC roles and security groups for Microsoft Intune Remote Help permissions.
 
