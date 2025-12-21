@@ -68,22 +68,43 @@ Creating Remote Help RBAC roles and groups...
 Processing: Remote Help - View Screen Only
   [SUCCESS] Role created!
     Role ID: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+  Checking for Entra ID group: Intune-RemoteHelp-ViewScreenOnly
   [SUCCESS] Group created!
     Group ID: f9e8d7c6-b5a4-3210-fedc-ba0987654321
     Group Name: Intune-RemoteHelp-ViewScreenOnly
 
 Processing: Remote Help - Full Control
-  [INFO] Role already exists, skipping creation
-  [INFO] Group already exists, skipping creation
+  [SUCCESS] Role created!
+    Role ID: b2c3d4e5-f6a7-8901-bcde-f12345678901
+  Checking for Entra ID group: Intune-RemoteHelp-FullControl
+  [SUCCESS] Group created!
+    Group ID: e8d7c6b5-a4f3-2109-edcb-a09876543210
+    Group Name: Intune-RemoteHelp-FullControl
+
+Processing: Remote Help - Elevation
+  [SUCCESS] Role created!
+    Role ID: c3d4e5f6-a7b8-9012-cdef-123456789012
+  Checking for Entra ID group: Intune-RemoteHelp-Elevation
+  [SUCCESS] Group created!
+    Group ID: d7c6b5a4-f321-0fed-cba0-987654321098
+    Group Name: Intune-RemoteHelp-Elevation
+
+Processing: Remote Help - Unattended (Android)
+  [SUCCESS] Role created!
+    Role ID: d4e5f6a7-b890-1234-def1-234567890123
+  Checking for Entra ID group: Intune-RemoteHelp-Unattended
+  [SUCCESS] Group created!
+    Group ID: c6b5a4f3-210f-edcb-a098-765432109876
+    Group Name: Intune-RemoteHelp-Unattended
 
 =========================================
 
 Summary:
-  Roles created: 2
-  Roles already existing: 2
+  Roles created: 4
+  Roles already existing: 0
   Roles failed: 0
-  Groups created: 2
-  Groups already existing: 2
+  Groups created: 4
+  Groups already existing: 0
   Groups failed: 0
 
 Note: To assign these roles to groups, go to:
@@ -107,14 +128,6 @@ After running the script:
    - Add the corresponding group as **Admin Group**
    - Set the scope (all devices, specific groups, etc.)
 
-## Features
-
-- ✅ Idempotent - safe to run multiple times
-- ✅ WhatIf mode - preview changes without making them
-- ✅ Remove mode - clean up all created resources
-- ✅ Error handling - detailed error messages and summaries
-- ✅ Helper functions - optimized and maintainable code
-
 ## Documentation
 
 For more information about Remote Help RBAC permissions, see:
@@ -128,7 +141,3 @@ MIT License - See LICENSE file for details
 ## Author
 
 Martin Bengtsson
-
-## Contributing
-
-Issues and pull requests are welcome!
