@@ -39,22 +39,22 @@ Install-Module Microsoft.Graph.Authentication
 
 ### Create Roles and Groups
 ```powershell
-.\Create-Intune-Remote-Help-Roles-Groups.ps1
+.\Create-Intune-Remote-Help-RBAC-Roles-Groups.ps1
 ```
 
 ### Preview Changes (WhatIf Mode)
 ```powershell
-.\Create-Intune-Remote-Help-Roles-Groups.ps1 -WhatIf
+.\Create-Intune-Remote-Help-RBAC-Roles-Groups.ps1 -WhatIf
 ```
 
 ### Remove All Roles and Groups
 ```powershell
-.\Create-Intune-Remote-Help-Roles-Groups.ps1 -Remove
+.\Create-Intune-Remote-Help-RBAC-Roles-Groups.ps1 -Remove
 ```
 
 ### Remove with Preview
 ```powershell
-.\Create-Intune-Remote-Help-Roles-Groups.ps1 -Remove -WhatIf
+.\Create-Intune-Remote-Help-RBAC-Roles-Groups.ps1 -Remove -WhatIf
 ```
 
 ## Output Example
