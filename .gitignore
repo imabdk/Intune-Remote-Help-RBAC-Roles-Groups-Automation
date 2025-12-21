@@ -1,0 +1,15 @@
+# PowerShell
+*.ps1xml
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.vs/
+*.code-workspace
