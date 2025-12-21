@@ -134,10 +134,6 @@ For more information about Remote Help RBAC permissions, see:
 - [Planning for Remote Help with Microsoft Intune](https://learn.microsoft.com/en-us/intune/fundamentals/remote-help-plan)
 - [Role-based access control (RBAC) with Microsoft Intune](https://learn.microsoft.com/en-us/intune/fundamentals/role-based-access-control)
 
-## License
-
-MIT License - See LICENSE file for details
-
 ## Author
 
-Martin Bengtsson
+Martin Bengtsson - [imab.dk](https://imab.dk)
