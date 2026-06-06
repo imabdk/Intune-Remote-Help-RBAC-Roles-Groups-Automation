@@ -22,15 +22,15 @@
     Shows what would happen if the script runs without making any changes.
 
 .EXAMPLE
-    .\Create-Intune-Remote-Help-Roles-Groups.ps1
+    .\Create-Intune-Remote-Help-RBAC-Roles-Groups.ps1
     Creates roles and groups.
 
 .EXAMPLE
-    .\Create-Intune-Remote-Help-Roles-Groups.ps1 -Remove
+    .\Create-Intune-Remote-Help-RBAC-Roles-Groups.ps1 -Remove
     Removes all roles and groups.
 
 .EXAMPLE
-    .\Create-Intune-Remote-Help-Roles-Groups.ps1 -WhatIf
+    .\Create-Intune-Remote-Help-RBAC-Roles-Groups.ps1 -WhatIf
     Shows what would be created without making changes.
 
 .NOTES
