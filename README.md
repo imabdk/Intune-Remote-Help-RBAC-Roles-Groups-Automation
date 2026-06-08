@@ -1,19 +1,23 @@
 # Intune Remote Help RBAC Roles Groups Automation
 
-Automate the creation of custom RBAC roles and security groups for Microsoft Intune Remote Help permissions.
+Automate the creation of custom RBAC roles, security groups, and role assignments for Microsoft Intune Remote Help.
 
 ## Overview
 
-This PowerShell script creates four custom RBAC roles in Microsoft Intune, each with specific Remote Help permissions, along with corresponding Entra ID security groups for role assignment. It eliminates the manual, time-consuming process of setting up Remote Help RBAC roles through the Intune portal.
+This PowerShell script creates four custom RBAC roles in Microsoft Intune, each with specific Remote Help permissions, along with corresponding Entra ID security groups. Optionally, it binds each role to its paired group automatically with `-AssignRoles`.
+
+The script is idempotent - roles and groups that already exist are skipped. It also handles removal of everything it creates with `-Remove`.
+
+**Multi Admin Approval (MAA)**: On tenants where Intune RBAC changes are gated by an approval policy, the script detects the pending approval response, reports it in the output, and lists pending items with instructions at the end of the run.
 
 ### Created Roles
 
-| Role Name | Permissions | Use Case |
-|-----------|-------------|----------|
-| Remote Help - View Screen Only | View sharer's screen | Level 1 support, read-only assistance |
-| Remote Help - Full Control | Take full control of device | Level 2/3 support, active troubleshooting |
-| Remote Help - Elevation | Interact with UAC prompts (Windows) | Elevated administrative tasks |
-| Remote Help - Unattended (Android) | Connect without user acceptance | Managed Android device support |
+| Role Name | Security Group | Use Case |
+|-----------|---------------|----------|
+| Remote Help - View Screen Only | `Intune-RemoteHelp-ViewScreenOnly` | Level 1 support, read-only assistance |
+| Remote Help - Full Control | `Intune-RemoteHelp-FullControl` | Level 2/3 support, active troubleshooting |
+| Remote Help - Elevation | `Intune-RemoteHelp-Elevation` | Elevated administrative tasks (UAC) |
+| Remote Help - Unattended (Android) | `Intune-RemoteHelp-Unattended` | Managed Android dedicated device support |
 
 All roles include base permissions:
 - Remote Tasks - Offer remote assistance
@@ -32,105 +36,73 @@ Install-Module Microsoft.Graph.Authentication
 - `DeviceManagementRBAC.ReadWrite.All`
 - `Group.ReadWrite.All`
 
+> **Note**: Both permissions are broad and cover the entire tenant. They are the minimum required for this script to create and remove roles and groups. If you run this as a one-off, consider revoking the consent afterwards under **Entra admin center > Identity > Enterprise applications > Microsoft Graph Command Line Tools > Permissions > User consent**.
+
 ### Account Requirements
 - Global Administrator or Intune Administrator role
 
 ## Usage
 
-### Create Roles and Groups
+### Create roles and groups
 ```powershell
 .\Create-Intune-Remote-Help-RBAC-Roles-Groups.ps1
 ```
 
-### Preview Changes (WhatIf Mode)
+### Create roles, groups, and role assignments
 ```powershell
-.\Create-Intune-Remote-Help-RBAC-Roles-Groups.ps1 -WhatIf
+.\Create-Intune-Remote-Help-RBAC-Roles-Groups.ps1 -AssignRoles
 ```
 
-### Remove All Roles and Groups
+Role assignments are scoped to **All devices and All users**. The assignment step is idempotent - existing assignments targeting the same group are skipped.
+
+### Preview changes without making them
+```powershell
+.\Create-Intune-Remote-Help-RBAC-Roles-Groups.ps1 -AssignRoles -WhatIf
+```
+
+### Remove all roles, groups, and assignments
 ```powershell
 .\Create-Intune-Remote-Help-RBAC-Roles-Groups.ps1 -Remove
 ```
 
-### Remove with Preview
+Deleting a role definition cascades to its child role assignments automatically - no separate assignment cleanup needed.
+
+### Custom approval justification (MAA tenants)
 ```powershell
-.\Create-Intune-Remote-Help-RBAC-Roles-Groups.ps1 -Remove -WhatIf
+.\Create-Intune-Remote-Help-RBAC-Roles-Groups.ps1 -AssignRoles -ApprovalJustification "Remote Help rollout - July 2026"
 ```
 
-## Output Example
+## Multi Admin Approval (MAA)
 
-```
-Connecting to Microsoft Graph...
+Some tenants have an MAA policy enabled for the Role-based access control profile type. When this is the case, role and assignment creates/deletes are queued for a second admin to approve before taking effect.
 
-Creating Remote Help RBAC roles and groups...
-=========================================
+The script handles this automatically. At the end of the run, pending items are listed with the path to approve them:
 
-Processing: Remote Help - View Screen Only
-  [SUCCESS] Role created!
-    Role ID: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-  Checking for Entra ID group: Intune-RemoteHelp-ViewScreenOnly
-  [SUCCESS] Group created!
-    Group ID: f9e8d7c6-b5a4-3210-fedc-ba0987654321
-    Group Name: Intune-RemoteHelp-ViewScreenOnly
+> **Intune admin center > Tenant administration > Multi Admin Approval > Received requests**
 
-Processing: Remote Help - Full Control
-  [SUCCESS] Role created!
-    Role ID: b2c3d4e5-f6a7-8901-bcde-f12345678901
-  Checking for Entra ID group: Intune-RemoteHelp-FullControl
-  [SUCCESS] Group created!
-    Group ID: e8d7c6b5-a4f3-2109-edcb-a09876543210
-    Group Name: Intune-RemoteHelp-FullControl
+### Running on an MAA tenant with -AssignRoles
 
-Processing: Remote Help - Elevation
-  [SUCCESS] Role created!
-    Role ID: c3d4e5f6-a7b8-9012-cdef-123456789012
-  Checking for Entra ID group: Intune-RemoteHelp-Elevation
-  [SUCCESS] Group created!
-    Group ID: d7c6b5a4-f321-0fed-cba0-987654321098
-    Group Name: Intune-RemoteHelp-Elevation
+Because role assignments require an existing role ID, the script must be run twice on MAA-protected tenants:
 
-Processing: Remote Help - Unattended (Android)
-  [SUCCESS] Role created!
-    Role ID: d4e5f6a7-b890-1234-def1-234567890123
-  Checking for Entra ID group: Intune-RemoteHelp-Unattended
-  [SUCCESS] Group created!
-    Group ID: c6b5a4f3-210f-edcb-a098-765432109876
-    Group Name: Intune-RemoteHelp-Unattended
-
-=========================================
-
-Summary:
-  Roles created: 4
-  Roles already existing: 0
-  Roles failed: 0
-  Groups created: 4
-  Groups already existing: 0
-  Groups failed: 0
-
-Note: To assign these roles to groups, go to:
-  Intune portal > Tenant administration > Roles > Select role > Assignments
-```
+1. **First run** - creates roles (queued in MAA) and Entra groups
+2. Approve role creation requests in MAA, then **Complete** them under **My requests**
+3. **Second run with `-AssignRoles`** - roles are found, assignments are created (may also queue in MAA)
 
 ## Post-Installation
 
-After running the script:
+After running the script, add support staff to the appropriate security groups:
 
-1. **Add Users to Groups**: Add support staff to the appropriate security groups:
-   - `Intune-RemoteHelp-ViewScreenOnly`
-   - `Intune-RemoteHelp-FullControl`
-   - `Intune-RemoteHelp-Elevation`
-   - `Intune-RemoteHelp-Unattended`
+- `Intune-RemoteHelp-ViewScreenOnly` - view-only helpers
+- `Intune-RemoteHelp-FullControl` - full control helpers
+- `Intune-RemoteHelp-Elevation` - helpers who need UAC elevation
+- `Intune-RemoteHelp-Unattended` - Android unattended helpers
 
-2. **Assign Roles to Groups**: In the Intune admin center:
-   - Go to **Tenant administration** > **Roles**
-   - Select each created role
-   - Click **Assignments** > **Assign**
-   - Add the corresponding group as **Admin Group**
-   - Set the scope (all devices, specific groups, etc.)
+If you ran without `-AssignRoles`, assign roles manually:
+**Intune admin center > Tenant administration > Roles > Select role > Assignments**
 
 ## Documentation
 
-For more information about Remote Help RBAC permissions, see:
+- [Blog post - imab.dk](https://www.imab.dk/remote-help-is-included-in-e3-and-e5-from-july-1-heres-my-updated-powershell-script-to-roll-out-the-rbac/)
 - [Planning for Remote Help with Microsoft Intune](https://learn.microsoft.com/en-us/intune/fundamentals/remote-help-plan)
 - [Role-based access control (RBAC) with Microsoft Intune](https://learn.microsoft.com/en-us/intune/fundamentals/role-based-access-control)
 
