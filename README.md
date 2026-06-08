@@ -36,8 +36,6 @@ Install-Module Microsoft.Graph.Authentication
 - `DeviceManagementRBAC.ReadWrite.All`
 - `Group.ReadWrite.All`
 
-> **Note**: Both permissions are broad and cover the entire tenant. They are the minimum required for this script to create and remove roles and groups. If you run this as a one-off, consider revoking the consent afterwards under **Entra admin center > Identity > Enterprise applications > Microsoft Graph Command Line Tools > Permissions > User consent**.
-
 ### Account Requirements
 - Global Administrator or Intune Administrator role
 
