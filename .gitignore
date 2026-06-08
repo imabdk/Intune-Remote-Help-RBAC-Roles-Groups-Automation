@@ -13,3 +13,7 @@ desktop.ini
 .vscode/
 .vs/
 *.code-workspace
+
+# Blog post drafts and social media drafts (not for publication via repo)
+blog-draft*.md
+social-draft*.md
