@@ -94,7 +94,10 @@ param(
     [switch]$AssignRoles,
 
     [Parameter(Mandatory=$false)]
-    [string]$ApprovalJustification = 'Automated provisioning via Remote Help RBAC script'
+    [string]$ApprovalJustification = 'Automated provisioning via Remote Help RBAC script',
+
+    [Parameter(Mandatory=$false)]
+    [string]$TenantId
 )
 
 $requiredScopes = @("DeviceManagementRBAC.ReadWrite.All", "Group.ReadWrite.All")
@@ -102,7 +105,9 @@ $requiredScopes = @("DeviceManagementRBAC.ReadWrite.All", "Group.ReadWrite.All")
 # Connect to Microsoft Graph with required permissions
 Write-Host "Connecting to Microsoft Graph..." -ForegroundColor Cyan
 try {
-    Connect-MgGraph -Scopes $requiredScopes -NoWelcome -ErrorAction Stop
+    $connectParams = @{ Scopes = $requiredScopes; NoWelcome = $true; ErrorAction = 'Stop' }
+    if ($TenantId) { $connectParams['TenantId'] = $TenantId }
+    Connect-MgGraph @connectParams
 }
 catch {
     Write-Host "[ERROR] Failed to connect to Microsoft Graph: $($_.Exception.Message)" -ForegroundColor Red
