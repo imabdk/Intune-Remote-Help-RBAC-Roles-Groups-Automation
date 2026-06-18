@@ -56,10 +56,12 @@
 
 .NOTES
     Author: Martin Bengtsson
-    Date: June 7, 2026
-    Version: 2.5
+    Date: June 18, 2026
+    Version: 2.6
 
     Version History:
+    - 2.6 (2026-06-18): Added -TenantId parameter to support authenticating as a guest
+                        into a customer tenant when running the script cross-tenant.
     - 2.5 (2026-06-07): Added -AssignRoles to bind each role to its paired group with
                         scope 'All devices and All users'. -Remove deletes role definitions
                         only; child role assignments cascade automatically.
