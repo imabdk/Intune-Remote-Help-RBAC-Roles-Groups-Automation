@@ -3,11 +3,12 @@
     Creates Intune RBAC roles and security groups for Remote Help, optionally binding each role to its paired group.
 
 .DESCRIPTION
-    Creates four custom RBAC roles with their corresponding Entra ID security groups:
+    Creates five custom RBAC roles with their corresponding Entra ID security groups:
     - Remote Help - View Screen Only
     - Remote Help - Full Control
     - Remote Help - Elevation
     - Remote Help - Unattended (Android)
+    - Remote Help - Unattended Remote Sign-In (Windows)
     
     All roles include base permissions:
     - Remote Tasks - Offer remote assistance
@@ -34,6 +35,11 @@
     Default: 'Automated provisioning via Remote Help RBAC script'.
     Used with -AssignRoles and -Remove.
 
+.PARAMETER TenantId
+    Tenant ID or domain name to authenticate against. Use this when running the
+    script as a guest in a customer tenant, otherwise Connect-MgGraph targets the
+    home tenant of the signed-in account. Optional.
+
 .PARAMETER WhatIf
     Shows what would happen if the script runs without making any changes.
 
@@ -56,10 +62,26 @@
 
 .NOTES
     Author: Martin Bengtsson
-    Date: June 18, 2026
-    Version: 2.6
+    Date: September 15, 2026
+    Version: 2.7
 
     Version History:
+    - 2.7 (2026-09-15): Added 'Remote Help - Unattended Remote Sign-In (Windows)' role using the
+                        Microsoft.Intune_RemoteAssistanceApp_WindowsUnattended permission, covering
+                        the Windows unattended support released in the August 2026 Intune release.
+                        Fixed approval-code header probing in Invoke-MaaAwareRequest, which threw
+                        'The given header was not found' on non-MAA error responses and masked the
+                        underlying Graph error.
+                        Fixed the -AssignRoles idempotency check: the roleAssignments collection GET
+                        returns members as an empty array, so each assignment is now re-fetched
+                        individually. Previously every re-run tried to recreate existing assignments
+                        and failed with 400 Conflict.
+                        Role and group lookups now fail fast on duplicate display names instead of
+                        silently binding an assignment to more than one group. Re-enabled the
+                        Disconnect-MgGraph cleanup and documented -TenantId.
+                        The role definition cache now aborts on failure - previously a failed lookup
+                        left the cache empty, which looked like 'no roles exist' and would have
+                        created duplicates on a populated tenant.
     - 2.6 (2026-06-18): Added -TenantId parameter to support authenticating as a guest
                         into a customer tenant when running the script cross-tenant.
     - 2.5 (2026-06-07): Added -AssignRoles to bind each role to its paired group with
@@ -122,35 +144,50 @@ $missingScopes = @($requiredScopes | Where-Object { $_ -notin $context.Scopes })
 if ($missingScopes.Count -gt 0) {
     Write-Host "[ERROR] Connected, but missing required scopes: $($missingScopes -join ', ')" -ForegroundColor Red
     Write-Host "        Run Disconnect-MgGraph and re-run the script to re-consent." -ForegroundColor Yellow
-    Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
+    Disconnect-MgGraph -ErrorAction SilentlyContinue *>$null
     exit 1
 }
 
 # Wrap the main work in try/finally so we always disconnect from Graph
 try {
 
-# Cache all role definitions once to avoid querying Graph in a loop
+# Cache all role definitions once to avoid querying Graph in a loop.
+# This must succeed - an empty cache would look like "no roles exist" and create duplicates.
 Write-Host "Caching existing role definitions..." -ForegroundColor Cyan
-$allRoles = @(Get-MgDeviceManagementRoleDefinition -All)
-
-# Helper function to get existing role from the in-memory cache
-function Get-ExistingRole {
-    param([string]$RoleName)
-    return $allRoles | Where-Object { $_.DisplayName -eq $RoleName }
+try {
+    $allRoles = @(Get-MgDeviceManagementRoleDefinition -All -ErrorAction Stop)
+}
+catch {
+    Write-Host "[ERROR] Failed to read Intune role definitions: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "        Stopping - without this list the script cannot tell which roles already exist." -ForegroundColor Yellow
+    Write-Host "        Check that Intune is provisioned in the tenant, then re-run." -ForegroundColor Gray
+    exit 1
 }
 
-# Helper function to get existing group (escapes single quotes for OData)
+# Helper function to get existing role from the in-memory cache.
+# Throws on duplicates so the caller never binds an assignment to more than one role.
+function Get-ExistingRole {
+    param([string]$RoleName)
+
+    $found = @($allRoles | Where-Object { $_.DisplayName -eq $RoleName })
+    if ($found.Count -gt 1) {
+        throw "Found $($found.Count) role definitions named '$RoleName'. Remove the duplicates in Tenant administration > Roles before running this script."
+    }
+    return $found | Select-Object -First 1
+}
+
+# Helper function to get existing group (escapes single quotes for OData).
+# Throws on duplicates - Entra allows repeated display names, and silently taking
+# the first match would grant the role to an unintended group.
 function Get-ExistingGroup {
     param([string]$GroupName)
-    
-    try {
-        $escaped = $GroupName.Replace("'", "''")
-        return Get-MgGroup -Filter "displayName eq '$escaped'"
+
+    $escaped = $GroupName.Replace("'", "''")
+    $found = @(Get-MgGroup -Filter "displayName eq '$escaped'" -ErrorAction Stop)
+    if ($found.Count -gt 1) {
+        throw "Found $($found.Count) Entra ID groups named '$GroupName'. Rename or remove the duplicates before running this script."
     }
-    catch {
-        Write-Host "  [WARNING] Failed to query group: $($_.Exception.Message)" -ForegroundColor Yellow
-        return $null
-    }
+    return $found | Select-Object -First 1
 }
 
 # Wraps Invoke-MgGraphRequest with Multi Admin Approval (MAA) awareness.
@@ -190,12 +227,23 @@ function Invoke-MaaAwareRequest {
         return [pscustomobject]@{ Status = 'Success'; Data = $data; ApprovalCode = $null; Error = $null }
     }
     catch {
-        $statusCode   = $null
         $approvalCode = $null
-        if ($_.Exception.Response) {
-            $statusCode = [int]$_.Exception.Response.StatusCode
-            $hdr = $_.Exception.Response.Headers.GetValues('x-msft-approval-code')
-            if ($hdr) { $approvalCode = $hdr | Select-Object -First 1 }
+        $response     = $_.Exception.Response
+        $statusCode   = if ($response) { $response.StatusCode -as [int] } else { $null }
+        if ($response) {
+            # Header collection type varies (HttpResponseHeaders vs WebHeaderCollection) and
+            # GetValues() throws when the header is absent, so probe defensively.
+            try {
+                $values = $null
+                if ($response.Headers.TryGetValues('x-msft-approval-code', [ref]$values)) {
+                    $approvalCode = @($values) | Select-Object -First 1
+                }
+            }
+            catch {
+                Write-Verbose "TryGetValues unavailable on $($response.Headers.GetType().Name): $($_.Exception.Message)"
+                try   { $approvalCode = $response.Headers['x-msft-approval-code'] }
+                catch { Write-Verbose "Indexer fallback failed: $($_.Exception.Message)" }
+            }
         }
         if ($statusCode -eq 412 -and $approvalCode) {
             return [pscustomobject]@{ Status = 'PendingApproval'; Data = $null; ApprovalCode = $approvalCode; Error = $null }
@@ -224,15 +272,23 @@ function Set-RemoteHelpRoleAssignment {
     $listUri        = "https://graph.microsoft.com/beta/deviceManagement/roleDefinitions/$($RoleDefinition.Id)/roleAssignments"
     $createUri      = "https://graph.microsoft.com/beta/deviceManagement/roleAssignments"
 
-    # Check for an existing assignment that already targets this group
+    # Check for an existing assignment that already targets this group.
+    # The collection GET always returns members as an empty array, so each assignment
+    # has to be re-fetched individually to see who it actually targets.
     try {
         $listResponse = Invoke-MgGraphRequest -Method GET -Uri $listUri -ErrorAction Stop
-        $matching = @($listResponse.value) | Where-Object { $_.members -contains $EntraGroup.Id }
+        $existing = @(
+            foreach ($item in @($listResponse.value)) {
+                Invoke-MgGraphRequest -Method GET -Uri "$createUri/$($item.id)" -ErrorAction Stop
+            }
+        )
     }
     catch {
         Write-Host "  [WARNING] Could not list existing assignments: $($_.Exception.Message)" -ForegroundColor Yellow
-        $matching = @()
+        $existing = @()
     }
+
+    $matching = @($existing | Where-Object { @($_.members) -contains $EntraGroup.Id })
 
     if ($matching.Count -gt 0) {
         Write-Host "  [INFO] Role assignment already exists, skipping" -ForegroundColor Cyan
@@ -318,6 +374,12 @@ $roles = @(
         Description = "Allows connecting to Android devices without requiring user acceptance"
         Permissions = $basePermissions + @("Microsoft.Intune_RemoteAssistanceApp_Unattended")
         GroupName = "Intune-RemoteHelp-Unattended"
+    },
+    @{
+        Name = "Remote Help - Unattended Remote Sign-In (Windows)"
+        Description = "Allows connecting to corporate-owned Windows devices with the helper's own credentials without requiring user acceptance"
+        Permissions = $basePermissions + @("Microsoft.Intune_RemoteAssistanceApp_WindowsUnattended")
+        GroupName = "Intune-RemoteHelp-UnattendedWindows"
     }
 )
 
@@ -649,8 +711,8 @@ elseif ($pendingRolesCreate.Count -eq 0) {
 
 }
 finally {
-    # Disconnect-MgGraph intentionally disabled during development to keep the
-    # cached token between runs. Re-enable for production / one-shot usage.
-    # Write-Host "`nDisconnecting from Microsoft Graph..." -ForegroundColor Cyan
-    # Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
+    Write-Host "`nDisconnecting from Microsoft Graph..." -ForegroundColor Cyan
+    # The SDK can warn that it failed to clear the MSAL token cache even though the session ends
+    # cleanly, so all streams are discarded here.
+    Disconnect-MgGraph -ErrorAction SilentlyContinue *>$null
 }
