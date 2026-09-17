@@ -144,7 +144,8 @@ $missingScopes = @($requiredScopes | Where-Object { $_ -notin $context.Scopes })
 if ($missingScopes.Count -gt 0) {
     Write-Host "[ERROR] Connected, but missing required scopes: $($missingScopes -join ', ')" -ForegroundColor Red
     Write-Host "        Run Disconnect-MgGraph and re-run the script to re-consent." -ForegroundColor Yellow
-    Disconnect-MgGraph -ErrorAction SilentlyContinue *>$null
+    # The SDK can throw or warn while clearing its MSAL cache; that must not mask the scope error
+    try { Disconnect-MgGraph *>$null } catch { Write-Verbose "Disconnect-MgGraph: $($_.Exception.Message)" }
     exit 1
 }
 
@@ -712,7 +713,8 @@ elseif ($pendingRolesCreate.Count -eq 0) {
 }
 finally {
     Write-Host "`nDisconnecting from Microsoft Graph..." -ForegroundColor Cyan
-    # The SDK can warn that it failed to clear the MSAL token cache even though the session ends
-    # cleanly, so all streams are discarded here.
-    Disconnect-MgGraph -ErrorAction SilentlyContinue *>$null
+    if (Get-MgContext) {
+        # The SDK can throw or warn while clearing its MSAL cache; never let that escape a finally block
+        try { Disconnect-MgGraph *>$null } catch { Write-Verbose "Disconnect-MgGraph: $($_.Exception.Message)" }
+    }
 }
